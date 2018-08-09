@@ -7,6 +7,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <array>
+#include <fcntl.h>
 
 
 namespace Services {
@@ -47,8 +48,15 @@ Services::UDPServer::UDPServer(const char* port) {
     auto pAddrInfo = pAddrInfoList;
     for(; pAddrInfo != nullptr; pAddrInfo = pAddrInfo->ai_next){
 
+        /* Create Socket */
         m_socket = socket(pAddrInfo->ai_family, pAddrInfo->ai_socktype, pAddrInfo->ai_protocol);
         if (m_socket == -1) continue;
+
+        /* Non blocking socket */
+        auto flags  = fcntl(m_socket, F_GETFL);
+        fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
+
+        /* Bind socket to pAddrInfo */
         if (bind(m_socket, pAddrInfo->ai_addr, pAddrInfo->ai_addrlen) == 0) break;
         close(m_socket);
 
@@ -70,7 +78,7 @@ void Services::UDPServer::StopService()
 
 void Services::Run(){
 
-    recvfrom()
+
 }
 
 
