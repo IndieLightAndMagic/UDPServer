@@ -5,8 +5,11 @@
 #ifndef UDPSERVER_UDPSERVER_H
 #define UDPSERVER_UDPSERVER_H
 
+#include <set>
+#include <thread>
 
 #include <netdb.h>
+
 
 namespace Services {
 

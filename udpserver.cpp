@@ -17,17 +17,14 @@
 #include <fcntl.h>
 
 #include <arpa/inet.h>
-#include <set>
 
 
 //LIBRARY HEADERS
 #include "udpserver.h"
 
+static std::set<Services::UDPServer*> activeUDPServers{};
 
 Services::UDPServer::UDPServer(const char* port) {
-
-
-    static std::set<int> activeSockets{};
 
     std::memset(&hints, 0, sizeof(struct addrinfo));
 
@@ -65,7 +62,7 @@ Services::UDPServer::UDPServer(const char* port) {
         if (bind(m_socket, pAddrInfo->ai_addr, pAddrInfo->ai_addrlen) == 0){
 
             //Add to active sockets
-            activeSockets.insert(m_socket);
+            activeUDPServers.insert(this);
 
             //Message
             std::cout << "UDP Socket binded and listening in port: " << reinterpret_cast<sockaddr_in*>(pAddrInfo->ai_addr)->sin_port << std::endl;
@@ -97,6 +94,7 @@ void Services::UDPServer::RunService() {
 
     m_valid = true;
     std::once_flag flag, flagread;
+
 
     while(m_valid)
     {
@@ -132,8 +130,6 @@ void Services::UDPServer::RunService() {
 
             }
 
-
-
         } else if (nData == 0) {
             /* Peer Shut Down */
         } else {
@@ -141,12 +137,15 @@ void Services::UDPServer::RunService() {
         }
     }
 
+    auto found = activeUDPServers.find(this) != activeUDPServers.end();
+    if (found) activeUDPServers.erase(this);
     close(m_socket);
 
 }
 
 void Services::UDPServer::StopAllServices() {
 
+    for (auto& udpServer : activeUDPServers) udpServer->StopService();
 
 }
 
