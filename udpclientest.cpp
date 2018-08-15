@@ -2,18 +2,15 @@
 /*
     Simple udp client
 */
-#include<cstdio> //printf
-#include<cstring> //memset
-#include<cstdlib> //exit(0);
 
-#include<unistd.h>
-#include<arpa/inet.h>
-#include<sys/socket.h>
+#include "udpclient.h"
+#include "udpserver.h"
 
 #define SERVER "127.0.0.1"
-#define BUFLEN 512  //Max length of buffer
-#define PORT 8888   //The port on which to send data
+#define BUFLEN 2048 //Max length of buffer
+#define PORT "8888"   //The port on which to send data
 
+using namespace Services;
 void die(const char *s)
 {
     perror(s);
@@ -22,51 +19,42 @@ void die(const char *s)
 
 int main(void)
 {
-    struct sockaddr_in si_other;
-    int s, i, slen=sizeof(si_other);
+    UDPClient x;
     char buf[BUFLEN];
     char message[BUFLEN];
 
-    if ( (s=socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP)) == -1)
-    {
-        die("socket");
-    }
-
-    memset((char *) &si_other, 0, sizeof(si_other));
-    si_other.sin_family = AF_INET;
-    si_other.sin_port = htons(PORT);
-
-    if (inet_aton(SERVER , &si_other.sin_addr) == 0)
-    {
-        fprintf(stderr, "inet_aton() failed\n");
-        exit(1);
-    }
-
     while(1)
     {
+        std::memset(message, 0, BUFLEN);
         printf("Enter message : ");
         gets(message);
 
         //send the message
-        if (sendto(s, message, strlen(message) , 0 , (struct sockaddr *) &si_other, slen)==-1)
         {
-            die("sendto()");
-            break;
+            auto [ bValid, nBytesSent ] = x.Send(std::string{SERVER}, std::string{PORT}, reinterpret_cast<unsigned char*>(message), strlen(message));
+            if (bValid == false)
+            {
+                die("sendto()");
+                break;
+            }
+
         }
 
         //receive a reply and print it
         //clear the buffer by filling null, it might have previously received data
-        memset(buf,'\0', BUFLEN);
+        std::memset(buf, 0, BUFLEN);
+
         //try to receive some data, this is a blocking call
-        if (recvfrom(s, buf, BUFLEN, 0, reinterpret_cast<struct sockaddr *>(&si_other) , reinterpret_cast<socklen_t *>(&slen)) == -1)
+        auto [bValid, incomingIp, incomingPort, incomingMessage] = x.Recv();
+
+        if (bValid == false)
         {
             die("recvfrom()");
             break;
         }
 
-        puts(buf);
+        puts(reinterpret_cast<const char*>(incomingMessage.data()));
     }
 
-    close(s);
     return 0;
 }

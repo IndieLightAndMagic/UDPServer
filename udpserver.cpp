@@ -7,7 +7,9 @@
 #include <cstring>
 
 //C++
+#include <set>
 #include <array>
+#include <mutex>
 #include <thread>
 #include <iostream>
 
@@ -18,70 +20,48 @@
 
 #include <arpa/inet.h>
 
-
 //LIBRARY HEADERS
 #include "udpserver.h"
 
-static std::set<Services::UDPServer*> activeUDPServers{};
 
-Services::UDPServer::UDPServer(const char* port) {
-
-    std::memset(&hints, 0, sizeof(struct addrinfo));
-
-    hints.ai_family     = AF_UNSPEC;
-    hints.ai_socktype   = SOCK_DGRAM;
-    hints.ai_flags      = AI_PASSIVE;
-    hints.ai_protocol   = 0;
-    hints.ai_canonname  = nullptr;
-    hints.ai_addr       = nullptr;
-    hints.ai_next       = nullptr;
+Services::UDPServer::UDPServer(const char* port, const char* ipOrInterfaceName) {
 
     struct addrinfo* pAddrInfoList;
 
-    if(getaddrinfo(nullptr, port, &hints, &pAddrInfoList)){
-        m_valid = false;
-        return;
-    }
+    m_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
+    if (m_socket == -1) return;
 
-    auto pAddrInfo = pAddrInfoList;
-    for(; pAddrInfo != nullptr; pAddrInfo = pAddrInfo->ai_next){
+    /* Non blocking socket */
+    auto flags  = fcntl(m_socket, F_GETFL);
+    fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
 
-        /* Create Socket */
-        m_socket = socket(pAddrInfo->ai_family, pAddrInfo->ai_socktype, pAddrInfo->ai_protocol);
-        if (m_socket == -1) continue;
+    /* Reuse local addresses */
+    int reuseddr = 1;
+    setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &reuseddr, sizeof(int));
 
-        /* Non blocking socket */
-        auto flags  = fcntl(m_socket, F_GETFL);
-        fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
+    auto interfaces         = Services::NetworkInterface::GetInterfaces();
+    auto ifaceNameString    = ipOrInterfaceName ?  std::string{ ipOrInterfaceName } : std::string{};
+    auto& ipString          = ifaceNameString;
 
-        /* Reuse local addresses */
-        int reuseddr = 1;
-        setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &reuseddr, sizeof(int));
+    for (auto& interface : interfaces)
+    {
+        if (interface.familyString != "IPV4") continue;
+        bool paramHit = interface.interfaceName == ifaceNameString || interface.ip == ipString;
+        if (ipOrInterfaceName != nullptr && !paramHit) continue;
+        else if ((ipOrInterfaceName == nullptr  ) || (ipOrInterfaceName != nullptr && (paramHit))) {
 
-        /* Bind socket to pAddrInfo */
-        if (bind(m_socket, pAddrInfo->ai_addr, pAddrInfo->ai_addrlen) == 0){
+            if (bind(m_socket, &interface.sckadd, interface.scklen) == 0){
 
-            //Add to active sockets
-            activeUDPServers.insert(this);
+                //Binded ok.
+                std::cout << "UDP Socket binded and listening in " << interface.ip <<" : " << reinterpret_cast<sockaddr_in*>(&interface.sckadd)->sin_port << std::endl;
+                m_valid = true;
+                return;
 
-            //Message
-            std::cout << "UDP Socket binded and listening in port: " << reinterpret_cast<sockaddr_in*>(pAddrInfo->ai_addr)->sin_port << std::endl;
-            break;
+            }
+            continue;
         }
-
-        //Message
-        std::cout << "BIND UDP Socket FAILED!!!!" << std::endl;
-        close(m_socket);
-
     }
-    if (pAddrInfo == nullptr) {
-        m_valid = false;
-        return;
-    }
-
-    freeaddrinfo(pAddrInfoList);
-
-
+    close(m_socket);
 }
 
 void Services::UDPServer::StopService() {
@@ -110,6 +90,7 @@ void Services::UDPServer::RunService() {
         struct sockaddr_in  srcAddr;
         socklen_t           srcAddrLength;
 
+        /* receive in an unblocking fashion. */
         auto nData = recvfrom(m_socket, bufferRawData, bufferSize, 0, reinterpret_cast<struct sockaddr*>(&srcAddr), &srcAddrLength);
         std::call_once(flagread, [&](){
             std::cout << "Recvfrom result = " << nData << std::endl;
@@ -137,15 +118,64 @@ void Services::UDPServer::RunService() {
         }
     }
 
-    auto found = activeUDPServers.find(this) != activeUDPServers.end();
-    if (found) activeUDPServers.erase(this);
     close(m_socket);
 
 }
 
-void Services::UDPServer::StopAllServices() {
 
-    for (auto& udpServer : activeUDPServers) udpServer->StopService();
+const std::vector<Services::NetworkInterface>& Services::NetworkInterface::GetInterfaces() {
+
+    static std::vector<Services::NetworkInterface> interfaces;
+
+    static std::once_flag flag;
+
+    std::call_once(flag, [&]() {
+
+        ifaddrs *ptrIfaddr;
+        ifaddrs *ifa;
+        int n, family, s;
+
+        if (getifaddrs(&ptrIfaddr) == -1) {
+            perror("getifaddrs");
+            exit(EXIT_FAILURE);
+        }
+
+        /* Walk through linked list, maintaining head pointer so we
+           can free list later */
+
+        for (ifa = ptrIfaddr; ifa != NULL; ifa = ifa->ifa_next) {
+
+            if (ifa->ifa_addr == NULL)
+                continue;
+
+            interfaces.push_back(NetworkInterface());
+            auto interfacesPtr  = interfaces.data();
+            auto lastIndex      = interfaces.size() - 1;
+            auto host           = std::array<char, NI_MAXHOST>{};
+            auto hostPtr        = host.data();
+
+            interfacesPtr               = &interfacesPtr[lastIndex];
+            interfacesPtr->interfaceName         = std::string{ifa->ifa_name};
+            interfacesPtr->family       = ifa->ifa_addr->sa_family;
+            interfacesPtr->scklen       = (interfacesPtr->family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
+            interfacesPtr->familyString = (interfacesPtr->family == AF_INET) ? std::string{"IPV4"} : (interfacesPtr->family == AF_INET6) ? std::string{"IPV6"} : std::string{"???"};
+            getnameinfo(ifa->ifa_addr, interfacesPtr->scklen, hostPtr, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
+            interfacesPtr->ip     = std::string{hostPtr};
+            std::memcpy(&interfacesPtr->sckadd, ifa->ifa_addr, sizeof(sockaddr));
+        }
+        freeifaddrs(ptrIfaddr);
+    });
+
+    return interfaces;
+}
+void Services::NetworkInterface::DisplayInterfaces() {
+
+    auto interfaces = Services::NetworkInterface::GetInterfaces();
+    for (auto& interface : interfaces){
+
+        std::cout << "[ " << interface.interfaceName << " ]\t" << interface.familyString << " : " << interface.ip << std::endl;
+
+    }
 
 }
 
