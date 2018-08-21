@@ -24,7 +24,7 @@
 #include "udpserver.h"
 
 
-Services::UDPServer::UDPServer(const char* port, const char* ipOrInterfaceName) {
+Services::UDPServer::UDPServer(const char* portString, const char* ipOrInterfaceNameString) {
 
     struct addrinfo* pAddrInfoList;
 
@@ -40,20 +40,29 @@ Services::UDPServer::UDPServer(const char* port, const char* ipOrInterfaceName) 
     setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &reuseddr, sizeof(int));
 
     auto interfaces         = Services::NetworkInterface::GetInterfaces();
-    auto ifaceNameString    = ipOrInterfaceName ?  std::string{ ipOrInterfaceName } : std::string{};
+    auto ifaceNameString    = ipOrInterfaceNameString ?  std::string{ ipOrInterfaceNameString } : std::string{};
     auto& ipString          = ifaceNameString;
 
     for (auto& interface : interfaces)
     {
         if (interface.familyString != "IPV4") continue;
         bool paramHit = interface.interfaceName == ifaceNameString || interface.ip == ipString;
-        if (ipOrInterfaceName != nullptr && !paramHit) continue;
-        else if ((ipOrInterfaceName == nullptr  ) || (ipOrInterfaceName != nullptr && (paramHit))) {
+        if (ipOrInterfaceNameString != nullptr && !paramHit) continue;
+        else if ((ipOrInterfaceNameString == nullptr  ) || (ipOrInterfaceNameString != nullptr && (paramHit))) {
+
+            //Set port
+            auto pSockAddr = reinterpret_cast<sockaddr_in*>(&interface.sckadd);
+            auto port = atol(portString);
+            pSockAddr->sin_port = htons(port);
+
 
             if (bind(m_socket, &interface.sckadd, interface.scklen) == 0){
 
+                auto tempPort       = pSockAddr->sin_port;
+                long portByteSwap   = (tempPort & 0x00ff) << 8;
+                portByteSwap       += (tempPort & 0xff00) >> 8;
                 //Binded ok.
-                std::cout << "UDP Socket binded and listening in " << interface.ip <<" : " << reinterpret_cast<sockaddr_in*>(&interface.sckadd)->sin_port << std::endl;
+                std::cout << "UDP Socket binded and listening in " << interface.ip <<" : " << portByteSwap << std::endl;
                 m_valid = true;
                 return;
 

@@ -39,8 +39,21 @@ namespace Services {
 
     public:
         UDPServer() = default;
-        UDPServer(const char* port, const char* ipOrInterfaceName);
+        /**
+         * @brief      Constructs the service, binding it to a port and a network interface.
+         *
+         * @param[in]  port               The port, a const char string.
+         * @param[in]  ipOrInterfaceNameString  The ip or interface network name to bind the service. A const char string. If the value of this para is nullptr then an interface binded to 127.0.0.1 (most of the time) will be chosen.
+         */
+        UDPServer(const char* port, const char* ipOrInterfaceNameString = nullptr);
+        /**
+         * @brief      Runs UDP Server. This function blocks until StopService is Called. 
+         */
         void RunService();
+
+        /**
+         * @brief      Stops the UDPService. This is called from a different thread than the one running UDPServer::StartService. 
+         */
         void StopService();
 
     };
