@@ -9,7 +9,8 @@ int main() {
 
 
     Services::NetworkInterface::DisplayInterfaces();
-    Services::UDPServer u("8888", nullptr);
+    auto interfaceMap = Services::NetworkInterface::GetNetworkInterfacesMap();
+    Services::UDPServer u("8888", &interfaceMap["bridge100"]["IPV4"]);
     std::thread t_service{[&](){
 
         u.RunService();
