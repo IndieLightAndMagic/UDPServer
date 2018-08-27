@@ -10,27 +10,10 @@
 
 #include <netdb.h>
 #include <ifaddrs.h>
-
+#include <networkinterfacesutil.h>
 
 
 namespace Services {
-    class UDPServer;
-    struct NetworkInterface {
-
-        static const std::vector<NetworkInterface>& GetInterfaces();
-        static void DisplayInterfaces();
-        int         family;
-        std::string familyString;
-        std::string interfaceName;
-        std::string ip;
-        sockaddr    sckadd;
-        socklen_t   scklen;
-
-        friend class Services::UDPServer;
-    private:
-        NetworkInterface() = default;
-
-    };
     class UDPServer {
 
         struct addrinfo bindingAddress;
@@ -42,10 +25,10 @@ namespace Services {
         /**
          * @brief      Constructs the service, binding it to a port and a network interface.
          *
-         * @param[in]  port               The port, a const char string.
-         * @param[in]  ipOrInterfaceNameString  The ip or interface network name to bind the service. A const char string. If the value of this para is nullptr then an interface binded to 127.0.0.1 (most of the time) will be chosen.
+         * @param[in]  port The port, a const char string.
+         * @param[in]  pNetworkInterface   The interface network to bind the service.
          */
-        UDPServer(const char* port, const char* ipOrInterfaceNameString = nullptr);
+        UDPServer(const char *port, const NetworkInterface *pNetworkInterface);
         /**
          * @brief      Runs UDP Server. This function blocks until StopService is Called. 
          */

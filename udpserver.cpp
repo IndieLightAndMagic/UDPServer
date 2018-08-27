@@ -19,12 +19,12 @@
 #include <fcntl.h>
 
 #include <arpa/inet.h>
+#include <networkinterfacesutil.h>
 
 //LIBRARY HEADERS
 #include "udpserver.h"
 
-
-Services::UDPServer::UDPServer(const char* portString, const char* ipOrInterfaceNameString) {
+Services::UDPServer::UDPServer(const char *portString, const NetworkInterface *pNetworkInterface) {
 
     struct addrinfo* pAddrInfoList;
 
@@ -39,37 +39,25 @@ Services::UDPServer::UDPServer(const char* portString, const char* ipOrInterface
     int reuseddr = 1;
     setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &reuseddr, sizeof(int));
 
-    auto interfaces         = Services::NetworkInterface::GetInterfaces();
-    auto ifaceNameString    = ipOrInterfaceNameString ?  std::string{ ipOrInterfaceNameString } : std::string{};
-    auto& ipString          = ifaceNameString;
+    //Use a copy of the address of the interface for this particular binding.
+    sockaddr sockaddrtobind;
+    auto pSockAddr_in   = reinterpret_cast<sockaddr_in*>(&sockaddrtobind);
+    auto pSockAddr      = reinterpret_cast<sockaddr*>(pSockAddr_in);
+    std::memcpy(pSockAddr_in, &pNetworkInterface->sckadd, sizeof(sockaddr));
+    pSockAddr_in->sin_port = htons(atol(portString));
+    auto socklen        = pNetworkInterface->scklen;
 
-    for (auto& interface : interfaces)
-    {
-        if (interface.familyString != "IPV4") continue;
-        bool paramHit = interface.interfaceName == ifaceNameString || interface.ip == ipString;
-        if (ipOrInterfaceNameString != nullptr && !paramHit) continue;
-        else if ((ipOrInterfaceNameString == nullptr  ) || (ipOrInterfaceNameString != nullptr && (paramHit))) {
+    if (bind(m_socket, pSockAddr, socklen) == 0) {
 
-            //Set port
-            auto pSockAddr = reinterpret_cast<sockaddr_in*>(&interface.sckadd);
-            auto port = atol(portString);
-            pSockAddr->sin_port = htons(port);
-
-
-            if (bind(m_socket, &interface.sckadd, interface.scklen) == 0){
-
-                auto tempPort       = pSockAddr->sin_port;
-                long portByteSwap   = (tempPort & 0x00ff) << 8;
-                portByteSwap       += (tempPort & 0xff00) >> 8;
-                //Binded ok.
-                std::cout << "UDP Socket binded and listening in " << interface.ip <<" : " << portByteSwap << std::endl;
-                m_valid = true;
-                return;
-
-            }
-            continue;
-        }
+        auto tempPort = pSockAddr_in->sin_port;
+        long portByteSwap = (tempPort & 0x00ff) << 8;
+        portByteSwap += (tempPort & 0xff00) >> 8;
+        //Binded ok.
+        std::cout << "UDP Socket binded and listening in " << pNetworkInterface->ip << " : " << portByteSwap << std::endl;
+        m_valid = true;
+        return;
     }
+
     close(m_socket);
 }
 
@@ -132,60 +120,5 @@ void Services::UDPServer::RunService() {
 }
 
 
-const std::vector<Services::NetworkInterface>& Services::NetworkInterface::GetInterfaces() {
-
-    static std::vector<Services::NetworkInterface> interfaces;
-
-    static std::once_flag flag;
-
-    std::call_once(flag, [&]() {
-
-        ifaddrs *ptrIfaddr;
-        ifaddrs *ifa;
-        int n, family, s;
-
-        if (getifaddrs(&ptrIfaddr) == -1) {
-            perror("getifaddrs");
-            exit(EXIT_FAILURE);
-        }
-
-        /* Walk through linked list, maintaining head pointer so we
-           can free list later */
-
-        for (ifa = ptrIfaddr; ifa != NULL; ifa = ifa->ifa_next) {
-
-            if (ifa->ifa_addr == NULL)
-                continue;
-
-            interfaces.push_back(NetworkInterface());
-            auto interfacesPtr  = interfaces.data();
-            auto lastIndex      = interfaces.size() - 1;
-            auto host           = std::array<char, NI_MAXHOST>{};
-            auto hostPtr        = host.data();
-
-            interfacesPtr               = &interfacesPtr[lastIndex];
-            interfacesPtr->interfaceName         = std::string{ifa->ifa_name};
-            interfacesPtr->family       = ifa->ifa_addr->sa_family;
-            interfacesPtr->scklen       = (interfacesPtr->family == AF_INET) ? sizeof(struct sockaddr_in) : sizeof(struct sockaddr_in6);
-            interfacesPtr->familyString = (interfacesPtr->family == AF_INET) ? std::string{"IPV4"} : (interfacesPtr->family == AF_INET6) ? std::string{"IPV6"} : std::string{"???"};
-            getnameinfo(ifa->ifa_addr, interfacesPtr->scklen, hostPtr, NI_MAXHOST, nullptr, 0, NI_NUMERICHOST);
-            interfacesPtr->ip     = std::string{hostPtr};
-            std::memcpy(&interfacesPtr->sckadd, ifa->ifa_addr, sizeof(sockaddr));
-        }
-        freeifaddrs(ptrIfaddr);
-    });
-
-    return interfaces;
-}
-void Services::NetworkInterface::DisplayInterfaces() {
-
-    auto interfaces = Services::NetworkInterface::GetInterfaces();
-    for (auto& interface : interfaces){
-
-        std::cout << "[ " << interface.interfaceName << " ]\t" << interface.familyString << " : " << interface.ip << std::endl;
-
-    }
-
-}
 
 

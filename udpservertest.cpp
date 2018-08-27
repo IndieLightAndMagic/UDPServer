@@ -7,6 +7,7 @@
 
 int main() {
 
+
     Services::NetworkInterface::DisplayInterfaces();
     Services::UDPServer u("8888", nullptr);
     std::thread t_service{[&](){
