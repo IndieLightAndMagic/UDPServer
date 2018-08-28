@@ -14,6 +14,8 @@ get_filename_component(3RD_LIBRARY ${CMAKE_SOURCE_DIR}/3rd/lib ABSOLUTE)
 
 get_filename_component(INTERFACESUTIL_DISTRO_INCLUDE ${ROOT_ROOT}/networkinterfacesutil/dist/include ABSOLUTE)
 get_filename_component(INTERFACESUTIL_DISTRO_LIBRARY ${ROOT_ROOT}/networkinterfacesutil/dist/lib ABSOLUTE)
+get_filename_component(SIGNALANDSLOTS_DISTRO_INCLUDE ${ROOT_ROOT}/signalslot/dist/include ABSOLUTE)
+
 
 get_filename_component(DISTRO_INCLUDE ${CMAKE_SOURCE_DIR}/dist/include ABSOLUTE)
 get_filename_component(DISTRO_LIBRARY ${CMAKE_SOURCE_DIR}/dist/lib ABSOLUTE)
@@ -31,9 +33,20 @@ target_link_libraries(udpservertest ${3RD_LIBRARY}/libNetworkInterfacesUtil.a)
 add_library(${TARGET_NAME} STATIC udpserver.cpp udpserver.h udpclient.cpp udpclient.h)
 
 #PRE BUILD COMMANDS 
-add_custom_target(FIRST_TARGET ALL DEPENDS
-    COMMAND ${CMAKE_COMMAND} -E copy ${INTERFACESUTIL_DISTRO_LIBRARY}/* ${3RD_LIBRARY}
-    COMMAND ${CMAKE_COMMAND} -E copy ${INTERFACESUTIL_DISTRO_INCLUDE}/* ${3RD_INCLUDE}
+FILE(GLOB 3RD_STATIC_LIBRARIES
+	"${INTERFACESUTIL_DISTRO_LIBRARY}/*"
+	)
+FILE(GLOB 3RD_HEADER_INCLUDES
+	"${INTERFACESUTIL_DISTRO_INCLUDE}/*.*"
+    "${SIGNALANDSLOTS_DISTRO_INCLUDE}/*.*"
+	)
+FILE(COPY 
+	${3RD_STATIC_LIBRARIES}
+    DESTINATION ${3RD_LIBRARY}
+)
+FILE(COPY 
+	${3RD_HEADER_INCLUDES}
+    DESTINATION ${3RD_INCLUDE}
 )
 
 #INCLUDE DIRECTORIES 

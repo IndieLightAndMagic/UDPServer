@@ -22,8 +22,8 @@ Services::UDPClient::UDPClient() {
 		m_valid = true;
 	}
 	/* Non blocking socket */
-	auto flags  = fcntl(m_socket, F_GETFL);
-    fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
+	//auto flags  = fcntl(m_socket, F_GETFL);
+    //fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
 	
 }
 
