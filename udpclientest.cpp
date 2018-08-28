@@ -3,10 +3,11 @@
     Simple udp client
 */
 
+#include <iostream>
 #include "udpclient.h"
 #include "udpserver.h"
 
-#define SERVER "127.0.0.1"
+#define SERVER "192.168.2.1"
 #define BUFLEN 2048 //Max length of buffer
 #define PORT "8888"   //The port on which to send data
 
@@ -17,12 +18,20 @@ void die(const char *s)
     exit(1);
 }
 
-int main(void)
+int main(int argc, char ** argv)
 {
     UDPClient x;
     char buf[BUFLEN];
     char message[BUFLEN];
 
+
+    if (argc < 3) {
+        std::cout << "Usage: idpclientest[ip] [port]\n\n";
+        std::cout << "\tip: The ip address of the remote service.\n";
+        std::cout << "\tport : The number of the UDP port to use.\n\n";
+        std::cout << "\tExample : udpclient test 192.168.0.15 8888\n";
+        return 0;
+    }
     while(1)
     {
         std::memset(message, 0, BUFLEN);
@@ -31,7 +40,7 @@ int main(void)
 
         //send the message
         {
-            auto [ bValid, nBytesSent ] = x.Send(std::string{SERVER}, std::string{PORT}, reinterpret_cast<unsigned char*>(message), strlen(message));
+            auto [ bValid, nBytesSent ] = x.Send(std::string{argv[1]}, std::string{argv[2]}, reinterpret_cast<unsigned char*>(message), strlen(message));
             if (bValid == false)
             {
                 die("sendto()");

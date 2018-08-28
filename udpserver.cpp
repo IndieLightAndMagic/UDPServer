@@ -85,7 +85,7 @@ void Services::UDPServer::RunService() {
         auto bufferRawData  = buffer.data();
         auto bufferSize     = buffer.size();
         struct sockaddr_in  srcAddr;
-        socklen_t           srcAddrLength;
+        socklen_t           srcAddrLength{sizeof(sockaddr_in)};
 
         /* receive in an unblocking fashion. */
         auto nData = recvfrom(m_socket, bufferRawData, bufferSize, 0, reinterpret_cast<struct sockaddr*>(&srcAddr), &srcAddrLength);
