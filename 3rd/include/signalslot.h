@@ -81,7 +81,7 @@ namespace GTech{
         }
 
         // assignment creates new Signal
-        Signal& operator=(Signal const& other) {
+        Signal& operator=(Signal const&) {
           disconnect_all();
         }
 

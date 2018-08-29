@@ -19,7 +19,6 @@
 #include <fcntl.h>
 
 #include <arpa/inet.h>
-#include <networkinterfacesutil.h>
 
 //LIBRARY HEADERS
 #include "udpserver.h"
@@ -84,29 +83,24 @@ void Services::UDPServer::RunService() {
 
         auto bufferRawData  = buffer.data();
         auto bufferSize     = buffer.size();
-        struct sockaddr_in  srcAddr;
-        socklen_t           srcAddrLength{sizeof(sockaddr_in)};
 
+        sockadd_data_array  srcAddr;
+        socklen_t           srcAddrLength{sizeof(sockaddr_in)};
+        auto pSrcAddr       = reinterpret_cast<struct sockaddr*>(srcAddr.data());
+        auto pSrcAddrIn     = reinterpret_cast<struct sockaddr_in*>(pSrcAddr);
         /* receive in an unblocking fashion. */
-        auto nData = recvfrom(m_socket, bufferRawData, bufferSize, 0, reinterpret_cast<struct sockaddr*>(&srcAddr), &srcAddrLength);
+        auto nData = recvfrom(m_socket, bufferRawData, bufferSize, 0, pSrcAddr, &srcAddrLength);
         std::call_once(flagread, [&](){
             std::cout << "Recvfrom result = " << nData << std::endl;
         });
         if (nData > 0) {
 
+
+
             /* Check Info on the peer */
-            std::string srcAddrString{inet_ntoa(srcAddr.sin_addr)};
-            auto        srcPort{ntohs(srcAddr.sin_port)};
-            std::cout << "\t" << srcAddrString << " : \t" << srcPort << ":\n";
 
-            /* Data */
-            for (long index = 0; index < nData; ++index){
-
-                std::cout << bufferRawData[index];
-
-                if (index + 1 == nData) std::cout << std::endl;
-
-            }
+            auto datagram = datagram_tuple{nData, pSrcAddrIn, bufferRawData};
+            dataIsReady.emit(datagram);
 
         } else if (nData == 0) {
             /* Peer Shut Down */
