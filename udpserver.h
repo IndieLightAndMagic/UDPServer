@@ -22,10 +22,10 @@
 namespace Services {
     class UDPServer {
 
-
-        struct addrinfo bindingAddress;
-        int m_socket{-1};
         bool m_valid{false};
+
+    protected:
+        int m_socket{-1};
 
     public:
         //an array of bytes to hold sockaddr_in structure.
@@ -58,7 +58,11 @@ namespace Services {
          */
         GTech::Signal<datagram_tuple> dataIsReady;
 
-    private:
+        /*!
+         * @brief Send a datagram tuple.
+         * @param datagramTuple is the tuple containing a long type byte size of the datagram, a pointer to sockaddr_in structure which contains info regarding the dest address port and a pointer to the byte vector itself with the data to be transmitted.
+         */
+        void SendDatagram(const datagram_tuple& datagramTuple);
 
         //incoming data Q.
         std::queue<datagram_tuple> rxBuffer;

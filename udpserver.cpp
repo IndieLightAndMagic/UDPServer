@@ -113,6 +113,12 @@ void Services::UDPServer::RunService() {
 
 }
 
+void Services::UDPServer::SendDatagram(const Services::UDPServer::datagram_tuple &datagramTuple) {
 
+    auto& [ nData, pSrcAddrIn , pBufferRawData] = datagramTuple;
+    auto pSrcAddr = reinterpret_cast<sockaddr*>(pSrcAddrIn);
+    auto nBytesSent = sendto(m_socket, pBufferRawData, nData, 0, pSrcAddr, sizeof(*pSrcAddr));
+
+}
 
 

@@ -5,27 +5,38 @@
 #include <thread>
 #include <iostream>
 
+class MyUDPServer : public Services::UDPServer {
 
-void dataReady(Services::UDPServer::datagram_tuple datagramTuple)
-{
-    std::cout << "Data Arrived!!!!!\n";
-
-    auto [ nData, pSrcAddrIn , pBufferRawData] = datagramTuple;
-
-    std::string srcAddrString{inet_ntoa(pSrcAddrIn->sin_addr)};
-    auto        srcPort{ntohs(pSrcAddrIn->sin_port)};
-    std::cout << "\t" << srcAddrString << " : \t" << srcPort << "\n";
-
-    /* Data */
-
-    for (long index = 0; index < nData; ++index){
-
-        std::cout << pBufferRawData[index];
-
-        if (index + 1 == nData) std::cout << std::endl;
+public:
+    MyUDPServer(const char* port, Services::NetworkInterface* pNetworkInterface):UDPServer(port, pNetworkInterface){
 
     }
-}
+    void onDataIsReady(Services::UDPServer::datagram_tuple datagramTuple)
+    {
+        std::cout << "Data Arrived!!!!!\n";
+
+        auto [ nData, pSrcAddrIn , pBufferRawData] = datagramTuple;
+        std::string srcAddrString{inet_ntoa(pSrcAddrIn->sin_addr)};
+        auto        srcPort{ntohs(pSrcAddrIn->sin_port)};
+        /* Display Sender */
+        std::cout << "\t" << srcAddrString << " : \t" << srcPort << "\n";
+        /* Display Data */
+        for (long index = 0; index < nData; ++index){
+
+            std::cout << pBufferRawData[index];
+            if (index + 1 == nData) std::cout << std::endl;
+
+        }
+        std::cout << "\n";
+
+    }
+    void onDataIsReadyPing(Services::UDPServer::datagram_tuple datagramTuple){
+        std::cout << "Sending.....\n";
+        SendDatagram(datagramTuple);
+    }
+
+};
+
 int main(int argc, char ** argv) {
 
     if (argc < 4) {
@@ -52,9 +63,9 @@ int main(int argc, char ** argv) {
         return 0;
     }
 
-    Services::UDPServer u(argv[3], &interfaceMap[argv[2]]);
-    u.dataIsReady.connect_function(dataReady);
-
+    MyUDPServer u(argv[3], &interfaceMap[argv[2]]);
+    u.dataIsReady.connect_member(&u, &MyUDPServer::onDataIsReady);
+    u.dataIsReady.connect_member(&u, &MyUDPServer::onDataIsReadyPing);
     std::thread t_service{[&](){
 
         u.RunService();
