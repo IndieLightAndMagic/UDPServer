@@ -6,16 +6,18 @@
 #define UDPSERVER_H
 
 
-
+//C++
 #include <queue>
 #include <string>
 #include <vector>
+#include <system_error>
+
+//POSIX
 #include <netdb.h>
-
-
 #include <ifaddrs.h>
 #include <arpa/inet.h>
 
+//MINE
 #include <networkinterfacesutil.h>
 #include <signalslot.h>
 
@@ -24,6 +26,8 @@ namespace Services {
 
         bool m_valid{false};
 
+
+
     protected:
         int m_socket{-1};
 
@@ -31,7 +35,7 @@ namespace Services {
         //an array of bytes to hold sockaddr_in structure.
         using sockadd_data_array    = std::array<unsigned char, sizeof(sockaddr_in)>;
 
-        //an udp datagram: the incoming info and the
+        //an udp datagram: Size of Incoming/Outcoming Data, Address of the Incoming/Outcoming Sender/Receiver, Address to the beginning of the data.
         using datagram_tuple        = std::tuple<long, sockaddr_in*, unsigned char*>;
 
 
@@ -56,7 +60,17 @@ namespace Services {
         /*!
          * A signal to notify data has arrived and is ready to be read
          */
-        GTech::Signal<datagram_tuple> dataIsReady;
+        GTech::Signal<datagram_tuple> datagramReceived;
+
+        /*!
+         * A signal to notify data was sent. <SentChunkOffset, SentChunkSize, Whole Datagram>
+         */
+        GTech::Signal<long , long, const datagram_tuple&> datagramSent;
+
+        static void EmitError(const UDPServer& u, int errorNumber);
+        GTech::Signal<std::error_condition, std::string>    datagramError;
+        GTech::Signal<std::string>                          datagramUnknownError;
+
 
         /*!
          * @brief Send a datagram tuple.
@@ -64,8 +78,6 @@ namespace Services {
          */
         void SendDatagram(const datagram_tuple& datagramTuple);
 
-        //incoming data Q.
-        std::queue<datagram_tuple> rxBuffer;
 
     };
 }

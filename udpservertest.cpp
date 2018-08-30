@@ -64,8 +64,8 @@ int main(int argc, char ** argv) {
     }
 
     MyUDPServer u(argv[3], &interfaceMap[argv[2]]);
-    u.dataIsReady.connect_member(&u, &MyUDPServer::onDataIsReady);
-    u.dataIsReady.connect_member(&u, &MyUDPServer::onDataIsReadyPing);
+    u.datagramReceived.connect_member(&u, &MyUDPServer::onDataIsReady);
+    u.datagramReceived.connect_member(&u, &MyUDPServer::onDataIsReadyPing);
     std::thread t_service{[&](){
 
         u.RunService();
