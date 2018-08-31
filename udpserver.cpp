@@ -23,11 +23,24 @@
 //LIBRARY HEADERS
 #include "udpserver.h"
 
+constexpr int maxBufferSize = 1 << 13;
+
+std::shared_ptr<unsigned char>CreateBuffer(int size){
+    auto sp = std::shared_ptr<unsigned char>(
+        new unsigned char[maxBufferSize],
+        [](unsigned char* ptr){
+            delete []ptr;
+        }
+        );
+    auto ptr = sp.get();
+    for (auto index = 0; index < size; ++index){
+        ptr[index] = 0x0;
+    }
+    return sp;
+}
 
 
-Services::UDPServer::UDPServer(const char *portString, const NetworkInterface *pNetworkInterface) {
-
-    struct addrinfo* pAddrInfoList;
+void Services::UDPSocket::StartSocket(){
 
     m_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (m_socket == -1) return;
@@ -36,13 +49,31 @@ Services::UDPServer::UDPServer(const char *portString, const NetworkInterface *p
     auto flags  = fcntl(m_socket, F_GETFL);
     fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
 
+}
+
+
+Services::UDPSocket::UDPSocket()
+{
+    StartSocket();
+    m_valid = true;
+}
+
+Services::UDPSocket::UDPSocket(const char *portString, const NetworkInterface *pNetworkInterface) {
+
+    StartSocket();
+    
+    struct addrinfo* pAddrInfoList;
+
+    
     /* Reuse local addresses */
     int reuseddr = 1;
     setsockopt(m_socket, SOL_SOCKET, SO_REUSEADDR, &reuseddr, sizeof(int));
 
     //Use a copy of the address of the interface for this particular binding.
-    sockaddr sockaddrtobind;
-    auto pSockAddr_in       = reinterpret_cast<sockaddr_in*>(&sockaddrtobind);
+    
+    auto pSockaddrtobind    = std::make_shared<sockaddr>();
+    auto pSockaddrtobindraw = pSockaddrtobind.get();
+    auto pSockAddr_in       = reinterpret_cast<sockaddr_in*>(&pSockaddrtobindraw);
     auto pSockAddr          = reinterpret_cast<sockaddr*>(pSockAddr_in);
     std::memcpy(pSockAddr_in, &pNetworkInterface->sckadd, sizeof(sockaddr));
     pSockAddr_in->sin_port  = htons(atol(portString));
@@ -62,13 +93,13 @@ Services::UDPServer::UDPServer(const char *portString, const NetworkInterface *p
     close(m_socket);
 }
 
-void Services::UDPServer::StopService() {
+void Services::UDPSocket::StopService() {
 
     m_valid = false;
 
 }
 
-void Services::UDPServer::RunService() {
+void Services::UDPSocket::RunService() {
 
     m_valid = true;
     std::once_flag flag, flagread;
@@ -89,6 +120,7 @@ void Services::UDPServer::RunService() {
         socklen_t           srcAddrLength{sizeof(sockaddr_in)};
         auto pSrcAddr       = reinterpret_cast<struct sockaddr*>(srcAddr.data());
         auto pSrcAddrIn     = reinterpret_cast<struct sockaddr_in*>(pSrcAddr);
+        
         /* receive in an unblocking fashion. */
         auto nRawDataSize   = recvfrom(m_socket, bufferRawData, bufferSize, 0, pSrcAddr, &srcAddrLength);
         auto errorNumber    = errno;
@@ -113,28 +145,70 @@ void Services::UDPServer::RunService() {
 
 }
 
-void Services::UDPServer::SendDatagram(const Services::UDPServer::datagram_tuple &datagramTuple) {
+void Services::UDPSocket::SendDatagram(const Services::UDPSocket::datagram_tuple &datagramTuple) {
 
-    auto& [ nRawDataSize, pSrcAddrIn , pBufferRawData] = datagramTuple;
-    auto pSrcAddr                               = reinterpret_cast<sockaddr*>(pSrcAddrIn);
-    long nBytesSentAccumulator                  = 0;
+    auto& [ nRawDataSize, pSrcAddrIn , pBufferData] = datagramTuple;
+    auto pSrcAddr                                   = reinterpret_cast<sockaddr*>(pSrcAddrIn.get());
+    auto pBufferRawData                             = pBufferData.get();
+    long nBytesSentAccumulator                      = 0;
 
     while (nBytesSentAccumulator < nRawDataSize){
 
         auto nBytesSentResult   = sendto(m_socket, &pBufferRawData[nBytesSentAccumulator], nRawDataSize, 0, pSrcAddr, sizeof(*pSrcAddr));
         auto errorNumber        = errno;
         if (nBytesSentResult < 0 ){
-            Services::UDPServer::EmitError(*this, errorNumber);
+            Services::UDPSocket::EmitError(*this, errorNumber);
         } else if (nBytesSentResult){
-            Services::UDPServer::datagramSent.emit(nBytesSentAccumulator, nBytesSentResult, datagramTuple);
+            Services::UDPSocket::datagramSent.emit(nBytesSentAccumulator, nBytesSentResult, datagramTuple);
         } else {
-            Services::UDPServer::EmitError(*this, 0);
+            Services::UDPSocket::EmitError(*this, 0);
         }
 
     }
 }
 
-void Services::UDPServer::EmitError(const UDPServer& u, int errorNumber){
+std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> InvalidDatagram(){
+
+    bool valid = false;
+    auto errorcondition = std::error_condition{};
+    auto datagram   = std::make_tuple(0, nullptr, nullptr);
+
+    return std::make_tuple(valid, errorcondition, datagram);
+
+};
+
+std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> Services::UDPSocket::RecvDatagram() {
+
+
+    if (m_valid == false) return InvalidDatagram();
+
+    auto    si_otherRaw = std::shared_ptr<struct sockaddr_in>(); 
+    auto    pSockAddr   = reinterpret_cast<struct sockaddr*>(si_otherRaw.get());
+    int     slen;
+    auto    pSocklen    = reinterpret_cast<socklen_t *>(&slen);
+    
+    auto    buffer      = CreateBuffer(maxBufferSize);
+    
+    //Read
+    auto nBytes = recvfrom(m_socket, buffer.get(), maxBufferSize, 0, pSockAddr, pSocklen);
+    
+    //Error
+    if ( nBytes == -1 ) return InvalidDatagram();
+    
+    //No Error but nothing returned.
+    auto valid = true;
+    if ( nBytes == 0) return std::make_tuple(true, std::error_condition{}, std::make_tuple(0, nullptr, nullptr));
+
+    return std::make_tuple(true, std::error_condition{}, std::make_tuple(nBytes, si_otherRaw, buffer));
+    
+}
+Services::UDPSocket::datagram_tuple Services::UDPSocket::CreateDatagram(std::string , std::string , unsigned char *, long ){
+
+
+    return datagram_tuple{};
+
+}
+void Services::UDPSocket::EmitError(const UDPSocket& u, int errorNumber){
 
     switch (errorNumber)
     {

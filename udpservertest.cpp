@@ -5,13 +5,13 @@
 #include <thread>
 #include <iostream>
 
-class MyUDPServer : public Services::UDPServer {
+class MyUDPServer : public Services::UDPSocket {
 
 public:
-    MyUDPServer(const char* port, Services::NetworkInterface* pNetworkInterface):UDPServer(port, pNetworkInterface){
+    MyUDPServer(const char* port, Services::NetworkInterface* pNetworkInterface):UDPSocket(port, pNetworkInterface){
 
     }
-    void onDataIsReady(Services::UDPServer::datagram_tuple datagramTuple)
+    void onDataIsReady(Services::UDPSocket::datagram_tuple datagramTuple)
     {
         std::cout << "Data Arrived!!!!!\n";
 
@@ -30,7 +30,7 @@ public:
         std::cout << "\n";
 
     }
-    void onDataIsReadyPing(Services::UDPServer::datagram_tuple datagramTuple){
+    void onDataIsReadyPing(Services::UDPSocket::datagram_tuple datagramTuple){
         std::cout << "Sending.....\n";
         SendDatagram(datagramTuple);
     }

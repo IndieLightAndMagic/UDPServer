@@ -1,13 +1,13 @@
 //
 // Created by Julian Andres Guarin Reyes on 8/9/18.
 //
-
-#ifndef UDPSERVER_H
-#define UDPSERVER_H
+#ifndef __UDPSERVICE_H__
+#define __UDPSERVICE_H__
 
 
 //C++
 #include <queue>
+#include <memory>
 #include <string>
 #include <vector>
 #include <system_error>
@@ -22,31 +22,40 @@
 #include <signalslot.h>
 
 namespace Services {
-    class UDPServer {
+    class UDPSocket {
 
         bool m_valid{false};
-
-
+        
+        /**
+         * @brief      Starts a datagram socket.
+         */
+        void StartSocket();
 
     protected:
         int m_socket{-1};
+
 
     public:
         //an array of bytes to hold sockaddr_in structure.
         using sockadd_data_array    = std::array<unsigned char, sizeof(sockaddr_in)>;
 
-        //an udp datagram: Size of Incoming/Outcoming Data, Address of the Incoming/Outcoming Sender/Receiver, Address to the beginning of the data.
-        using datagram_tuple        = std::tuple<long, sockaddr_in*, unsigned char*>;
+        /*!
+         * an udp datagram: Size of Incoming/Outcoming Data, Pointer to a struct with the Address of the Incoming/Outcoming Sender/Receiver, Address to the beginning of the data.
+         */
+        using datagram_tuple        = std::tuple<long, std::shared_ptr<struct sockaddr_in>, std::shared_ptr<unsigned char>>;
 
+        /**
+         * @brief      Constructor for a non listening socket (normally used for clients)
+         */
 
-        UDPServer() = default;
+        UDPSocket();
         /**
          * @brief      Constructs the service, binding it to a port and a network interface.
          *
          * @param[in]  port The port, a const char string.
          * @param[in]  pNetworkInterface   The interface network to bind the service.
          */
-        UDPServer(const char *port, const NetworkInterface *pNetworkInterface);
+        UDPSocket(const char *port, const NetworkInterface *pNetworkInterface);
         /**
          * @brief      Runs UDP Server. This function blocks until StopService is Called. 
          */
@@ -67,7 +76,7 @@ namespace Services {
          */
         GTech::Signal<long , long, const datagram_tuple&> datagramSent;
 
-        static void EmitError(const UDPServer& u, int errorNumber);
+        static void EmitError(const UDPSocket& u, int errorNumber);
         GTech::Signal<std::error_condition, std::string>    datagramError;
         GTech::Signal<std::string>                          datagramUnknownError;
 
@@ -78,8 +87,26 @@ namespace Services {
          */
         void SendDatagram(const datagram_tuple& datagramTuple);
 
+        /**
+         * @brief      Recieve a Datagram. This function doesn't block. 
+         *
+         * @return     A tuple with 3 fields: a bool to check if a datagram was received (true) or not(false). An error_condition which should be ignored if message is valid. A datagram with the received datagram if message is valid. 
+         */
+        std::tuple<bool, std::error_condition, datagram_tuple> RecvDatagram();
+
+        /**
+         * @brief      Create a Datagram with message and destination ip:port address. 
+         *
+         * @param[in]  ip    { parameter_description }
+         * @param[in]  port  The port
+         *
+         * @return     { description_of_the_return_value }
+         */
+        datagram_tuple CreateDatagram(std::string ip, std::string port, unsigned char* pDataBuffer, long sz);
+
 
     };
 }
 
-#endif //UDPSERVER_H
+#endif //__UDPSERVICE_H__
+
