@@ -2,6 +2,7 @@
 #include <sys/types.h>
 
 //C
+#include <cassert>
 #include <cerrno>
 #include <cstdio>
 #include <cstdlib>
@@ -133,19 +134,17 @@ void Services::UDPSocket::RunService() {
             /* Check Info on the peer */
             auto datagram = datagram_tuple{nRawDataSize, pSrcAddrIn, bufferRawData};
             datagramReceived.emit(datagram);
-
+            
         } else {
-
             EmitError(*this, errorNumber);
-
         }
     }
 
     close(m_socket);
-
+    std::cout << "Socket is closed....\n";
 }
 
-void Services::UDPSocket::SendDatagram(const Services::UDPSocket::datagram_tuple &datagramTuple) {
+long Services::UDPSocket::SendDatagram(const Services::UDPSocket::datagram_tuple &datagramTuple) {
 
     auto& [ nRawDataSize, pSrcAddrIn , pBufferData] = datagramTuple;
     auto pSrcAddr                                   = reinterpret_cast<sockaddr*>(pSrcAddrIn.get());
@@ -156,15 +155,23 @@ void Services::UDPSocket::SendDatagram(const Services::UDPSocket::datagram_tuple
 
         auto nBytesSentResult   = sendto(m_socket, &pBufferRawData[nBytesSentAccumulator], nRawDataSize, 0, pSrcAddr, sizeof(*pSrcAddr));
         auto errorNumber        = errno;
+        
         if (nBytesSentResult < 0 ){
+        
             Services::UDPSocket::EmitError(*this, errorNumber);
+        
         } else if (nBytesSentResult){
+        
             Services::UDPSocket::datagramSent.emit(nBytesSentAccumulator, nBytesSentResult, datagramTuple);
+            nBytesSentAccumulator += nBytesSentResult;
+        
         } else {
+        
             Services::UDPSocket::EmitError(*this, 0);
+        
         }
-
     }
+    return nBytesSentAccumulator;
 }
 
 std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> InvalidDatagram(){
@@ -202,10 +209,26 @@ std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> Serv
     return std::make_tuple(true, std::error_condition{}, std::make_tuple(nBytes, si_otherRaw, buffer));
     
 }
-Services::UDPSocket::datagram_tuple Services::UDPSocket::CreateDatagram(std::string , std::string , unsigned char *, long ){
+Services::UDPSocket::datagram_tuple Services::UDPSocket::CreateDatagram(std::string ipString, std::string portString , unsigned char* pDataBuffer, long sz){
 
+    auto pSockAddr          = std::make_shared<struct sockaddr_in>();
+    sockaddr_in* si_other   = pSockAddr.get();
 
-    return datagram_tuple{};
+    std::memset(si_other, 0, sizeof(sockaddr_in));
+    auto portx = std::atol(portString.data());
+    si_other->sin_family = AF_INET;
+    si_other->sin_port   = htons(portx);
+
+    const auto pIp = ipString.data();
+    if (inet_aton(pIp , &si_other->sin_addr) == 0)
+    {
+        return std::make_tuple(0, nullptr, nullptr);
+    }
+    auto dataBuffer = CreateBuffer(sz);
+    auto pBytes     = dataBuffer.get();
+    std::memcpy(pBytes, pDataBuffer, sz);
+    
+    return std::make_tuple(sz, pSockAddr, dataBuffer);
 
 }
 void Services::UDPSocket::EmitError(const UDPSocket& u, int errorNumber){
@@ -448,4 +471,8 @@ void Services::UDPSocket::EmitError(const UDPSocket& u, int errorNumber){
             break;
     }
 
+}
+
+Services::UDPSocket::~UDPSocket() {
+    std::cout << "UDPSocket out.\n";
 }

@@ -22,6 +22,7 @@
 #include <signalslot.h>
 
 namespace Services {
+    
     class UDPSocket {
 
         bool m_valid{false};
@@ -47,8 +48,8 @@ namespace Services {
         /**
          * @brief      Constructor for a non listening socket (normally used for clients)
          */
-
         UDPSocket();
+
         /**
          * @brief      Constructs the service, binding it to a port and a network interface.
          *
@@ -56,6 +57,7 @@ namespace Services {
          * @param[in]  pNetworkInterface   The interface network to bind the service.
          */
         UDPSocket(const char *port, const NetworkInterface *pNetworkInterface);
+
         /**
          * @brief      Runs UDP Server. This function blocks until StopService is Called. 
          */
@@ -76,6 +78,7 @@ namespace Services {
          */
         GTech::Signal<long , long, const datagram_tuple&> datagramSent;
 
+        
         static void EmitError(const UDPSocket& u, int errorNumber);
         GTech::Signal<std::error_condition, std::string>    datagramError;
         GTech::Signal<std::string>                          datagramUnknownError;
@@ -85,7 +88,7 @@ namespace Services {
          * @brief Send a datagram tuple.
          * @param datagramTuple is the tuple containing a long type byte size of the datagram, a pointer to sockaddr_in structure which contains info regarding the dest address port and a pointer to the byte vector itself with the data to be transmitted.
          */
-        void SendDatagram(const datagram_tuple& datagramTuple);
+        long SendDatagram(const datagram_tuple& datagramTuple);
 
         /**
          * @brief      Recieve a Datagram. This function doesn't block. 
@@ -102,9 +105,9 @@ namespace Services {
          *
          * @return     { description_of_the_return_value }
          */
-        datagram_tuple CreateDatagram(std::string ip, std::string port, unsigned char* pDataBuffer, long sz);
+        static datagram_tuple CreateDatagram(std::string ip, std::string port, unsigned char* pDataBuffer, long sz);
 
-
+        ~UDPSocket();
     };
 }
 

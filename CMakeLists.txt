@@ -22,7 +22,7 @@ get_filename_component(DISTRO_LIBRARY ${CMAKE_SOURCE_DIR}/dist/lib ABSOLUTE)
 
 
 #EXECUTABLES TO TEST LIBRARY SOURCES
-add_executable(udpclientest udpclientest.cpp udpclient.cpp)
+add_executable(udpclientest udpclientest.cpp udpserver.cpp)
 add_executable(udpservertest udpservertest.cpp udpserver.cpp ${3RD_LIBRARY}/libNetworkInterfacesUtil.a)
 
 target_link_libraries(udpclientest ${3RD_LIBRARY}/libNetworkInterfacesUtil.a)

@@ -8,16 +8,30 @@
 class MyUDPServer : public Services::UDPSocket {
 
 public:
+    GTech::Signal<> errorHappened;
     MyUDPServer(const char* port, Services::NetworkInterface* pNetworkInterface):UDPSocket(port, pNetworkInterface){
-
+        errorHappened.connect_member(this, &MyUDPServer::onErrorHappening);
+    }
+    void onErrorHappening()
+    {
+        std::cout << "Error is happenning!!!!!!\n";
     }
     void onDataIsReady(Services::UDPSocket::datagram_tuple datagramTuple)
     {
         std::cout << "Data Arrived!!!!!\n";
+        static unsigned int maxcount = 0;
+        ++maxcount;
+        if (maxcount > 1) {
+            errorHappened.emit();
+            return;
+        }
+        auto [ nData, pSrcAddrIn , pBufferData] = datagramTuple;
+        auto pBufferRawData                     = pBufferData.get();
+        auto pRawSrcAddrIn                      = pSrcAddrIn.get();
 
-        auto [ nData, pSrcAddrIn , pBufferRawData] = datagramTuple;
-        std::string srcAddrString{inet_ntoa(pSrcAddrIn->sin_addr)};
-        auto        srcPort{ntohs(pSrcAddrIn->sin_port)};
+        std::string srcAddrString{inet_ntoa(pRawSrcAddrIn->sin_addr)};
+        auto srcPort{ntohs(pRawSrcAddrIn->sin_port)};
+        
         /* Display Sender */
         std::cout << "\t" << srcAddrString << " : \t" << srcPort << "\n";
         /* Display Data */
@@ -30,9 +44,10 @@ public:
         std::cout << "\n";
 
     }
-    void onDataIsReadyPing(Services::UDPSocket::datagram_tuple datagramTuple){
-        std::cout << "Sending.....\n";
-        SendDatagram(datagramTuple);
+    void onDataIsReadyPing(Services::UDPSocket::datagram_tuple){
+        std::cout << "Sending: \n";
+        //std::cout << std::get<2>(datagramTuple).get() << "\n";
+        //SendDatagram(datagramTuple);
     }
 
 };
@@ -69,11 +84,13 @@ int main(int argc, char ** argv) {
     std::thread t_service{[&](){
 
         u.RunService();
-
+        std::cout << "Service Finished!!!\n";
+    
     }};
     std::this_thread::sleep_for(std::chrono::seconds(600));
+    std::cout << "Pre Stop\n";
     u.StopService();
-
+    std::cout << "Post Stop\n";
     t_service.join();
 
 
