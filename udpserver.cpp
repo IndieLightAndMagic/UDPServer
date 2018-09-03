@@ -26,7 +26,8 @@
 
 constexpr int maxBufferSize = 1 << 13;
 
-std::shared_ptr<unsigned char>CreateBuffer(int size){
+std::tuple <std::shared_ptr<unsigned char>, unsigned char*> CreateBuffer(int size){
+
     auto sp = std::shared_ptr<unsigned char>(
         new unsigned char[maxBufferSize],
         [](unsigned char* ptr){
@@ -37,9 +38,28 @@ std::shared_ptr<unsigned char>CreateBuffer(int size){
     for (auto index = 0; index < size; ++index){
         ptr[index] = 0x0;
     }
-    return sp;
+    return std::make_tuple(sp, ptr);
 }
 
+std::tuple<std::shared_ptr<sockaddr_in>, sockaddr_in*, sockaddr*, int> CreateIpSockAddr(){
+
+    auto    pSock       = std::make_shared<sockaddr_in>();
+    auto    pSockRawIn  = pSock.get();
+    auto    pSockRaw    = reinterpret_cast<sockaddr*>(pSockRawIn);
+    int     slen        = sizeof(sockaddr);
+
+    std::memset(pSockRawIn, 0, sizeof(sockaddr_in));
+    return  std::make_tuple(pSock, pSockRawIn, pSockRaw, slen);
+};
+
+std::tuple<std::shared_ptr<unsigned char>, unsigned char *, std::shared_ptr<sockaddr_in>, sockaddr_in*, sockaddr*, int> CreateBufferAndIpSockAddr(){
+
+    auto [buffer, bufferRaw]                        = CreateBuffer(maxBufferSize);
+    auto [pSock, pSockRawIn, pSockRaw, pSockLen]    = CreateIpSockAddr();
+
+    return std::make_tuple(buffer, bufferRaw, pSock, pSockRawIn, pSockRaw, pSockLen);
+
+};
 
 void Services::UDPSocket::StartSocket(){
 
@@ -72,26 +92,26 @@ Services::UDPSocket::UDPSocket(const char *portString, const NetworkInterface *p
 
     //Use a copy of the address of the interface for this particular binding.
     
-    auto pSockaddrtobind    = std::make_shared<sockaddr>();
-    auto pSockaddrtobindraw = pSockaddrtobind.get();
-    auto pSockAddr_in       = reinterpret_cast<sockaddr_in*>(&pSockaddrtobindraw);
-    auto pSockAddr          = reinterpret_cast<sockaddr*>(pSockAddr_in);
-    std::memcpy(pSockAddr_in, &pNetworkInterface->sckadd, sizeof(sockaddr));
-    pSockAddr_in->sin_port  = htons(atol(portString));
-    auto socklen            = pNetworkInterface->scklen;
+    auto [pSockAdd, pSockAddRawIn, pSockAddRaw, pSockAddrtobindLength] = CreateIpSockAddr();
+    std::memcpy(pSockAddRawIn, &pNetworkInterface->sckadd, pSockAddrtobindLength);
+    pSockAddRawIn->sin_port  = htons(atol(portString));
 
-    if (bind(m_socket, pSockAddr, socklen) == 0) {
 
-        auto tempPort = pSockAddr_in->sin_port;
+    if (bind(m_socket, pSockAddRaw, pSockAddrtobindLength) == 0) {
+
+        auto tempPort = pSockAddRawIn->sin_port;
         long portByteSwap = (tempPort & 0x00ff) << 8;
         portByteSwap += (tempPort & 0xff00) >> 8;
+
         //Binded ok.
         std::cout << "UDP Socket binded and listening in " << pNetworkInterface->ip << " : " << portByteSwap << std::endl;
         m_valid = true;
         return;
+
     }
 
     close(m_socket);
+
 }
 
 void Services::UDPSocket::StopService() {
@@ -110,20 +130,13 @@ void Services::UDPSocket::RunService() {
         std::call_once(flag, [&](){
             std::cout << "UDP Service running. " << std::endl;
         });
-        static unsigned long const maxBufferSize = 1 << 13;
-        std::array<unsigned char, maxBufferSize> buffer;
-        buffer.fill(0);
+        static unsigned long const maxBufferSize    = 1 << 13;
 
-        auto bufferRawData  = buffer.data();
-        auto bufferSize     = buffer.size();
 
-        sockadd_data_array  srcAddr;
-        socklen_t           srcAddrLength{sizeof(sockaddr_in)};
-        auto pSrcAddr       = reinterpret_cast<struct sockaddr*>(srcAddr.data());
-        auto pSrcAddrIn     = reinterpret_cast<struct sockaddr_in*>(pSrcAddr);
-        
+        auto [buffer, bufferRaw, pSock, pSockRawIn, pSockRaw, pSrcAddrLen] = CreateBufferAndIpSockAddr();
+
         /* receive in an unblocking fashion. */
-        auto nRawDataSize   = recvfrom(m_socket, bufferRawData, bufferSize, 0, pSrcAddr, &srcAddrLength);
+        auto nRawDataSize   = recvfrom(m_socket, bufferRaw, maxBufferSize, 0, reinterpret_cast<sockaddr*>(pSock.get()), reinterpret_cast<socklen_t *>(&pSrcAddrLen));
         auto errorNumber    = errno;
 
         std::call_once(flagread, [&](){
@@ -132,12 +145,15 @@ void Services::UDPSocket::RunService() {
         if (nRawDataSize > 0) {
 
             /* Check Info on the peer */
-            auto datagram = datagram_tuple{nRawDataSize, pSrcAddrIn, bufferRawData};
+            auto datagram = datagram_tuple{nRawDataSize, pSock, buffer};
             datagramReceived.emit(datagram);
+            std::cout << "OKO About to crash.....\n";
+        
             
         } else {
             EmitError(*this, errorNumber);
         }
+
     }
 
     close(m_socket);
@@ -189,26 +205,24 @@ std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> Serv
 
     if (m_valid == false) return InvalidDatagram();
 
-    auto    si_otherRaw = std::shared_ptr<struct sockaddr_in>(); 
-    auto    pSockAddr   = reinterpret_cast<struct sockaddr*>(si_otherRaw.get());
-    int     slen;
-    auto    pSocklen    = reinterpret_cast<socklen_t *>(&slen);
-    
-    auto    buffer      = CreateBuffer(maxBufferSize);
+    auto    [pSock, pSockRawIn, pSockRaw, pSockLen] = CreateIpSockAddr();
+    auto    [buffer, bufferRaw] = CreateBuffer(maxBufferSize);
     
     //Read
-    auto nBytes = recvfrom(m_socket, buffer.get(), maxBufferSize, 0, pSockAddr, pSocklen);
+    auto nBytes = recvfrom(m_socket, buffer.get(), maxBufferSize, 0, pSockRaw, reinterpret_cast<socklen_t *>(&pSockLen));
     
     //Error
     if ( nBytes == -1 ) return InvalidDatagram();
     
     //No Error but nothing returned.
     auto valid = true;
-    if ( nBytes == 0) return std::make_tuple(true, std::error_condition{}, std::make_tuple(0, nullptr, nullptr));
-
-    return std::make_tuple(true, std::error_condition{}, std::make_tuple(nBytes, si_otherRaw, buffer));
+    if ( nBytes == 0){
+        return std::make_tuple(true, std::error_condition{}, std::make_tuple(0, nullptr, nullptr));
+    } 
+    return std::make_tuple(true, std::error_condition{}, std::make_tuple(nBytes, pSock, buffer));
     
 }
+
 Services::UDPSocket::datagram_tuple Services::UDPSocket::CreateDatagram(std::string ipString, std::string portString , unsigned char* pDataBuffer, long sz){
 
     auto pSockAddr          = std::make_shared<struct sockaddr_in>();
@@ -224,9 +238,8 @@ Services::UDPSocket::datagram_tuple Services::UDPSocket::CreateDatagram(std::str
     {
         return std::make_tuple(0, nullptr, nullptr);
     }
-    auto dataBuffer = CreateBuffer(sz);
-    auto pBytes     = dataBuffer.get();
-    std::memcpy(pBytes, pDataBuffer, sz);
+    auto [dataBuffer, dataBufferRaw] = CreateBuffer(sz);
+    std::memcpy(dataBufferRaw, pDataBuffer, sz);
     
     return std::make_tuple(sz, pSockAddr, dataBuffer);
 
