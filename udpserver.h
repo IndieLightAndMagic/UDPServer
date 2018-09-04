@@ -25,8 +25,10 @@ namespace Services {
     
     class UDPSocket {
 
+        /*!
+        True when the descriptor is a valid one.
+        */
         bool m_valid{false};
-        
         /**
          * @brief      Starts a datagram socket.
          */
@@ -107,6 +109,20 @@ namespace Services {
          */
         static datagram_tuple CreateDatagram(std::string ip, std::string port, unsigned char* pDataBuffer, long sz);
 
+        /**
+         * @brief      Sets the socket blocking.
+         *
+         * @param[in]  blocking  The blocking
+         */
+        void SetSocketBlocking(bool blocking);
+
+        /**
+         * @brief      Determines if socket blocking.
+         *
+         * @return     True if socket blocking, False otherwise.
+         */
+        bool IsSocketBlocking();
+        
         ~UDPSocket();
     };
 }

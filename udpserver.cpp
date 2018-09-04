@@ -50,7 +50,7 @@ std::tuple<std::shared_ptr<sockaddr_in>, sockaddr_in*, sockaddr*, int> CreateIpS
 
     std::memset(pSockRawIn, 0, sizeof(sockaddr_in));
     return  std::make_tuple(pSock, pSockRawIn, pSockRaw, slen);
-};
+}
 
 std::tuple<std::shared_ptr<unsigned char>, unsigned char *, std::shared_ptr<sockaddr_in>, sockaddr_in*, sockaddr*, int> CreateBufferAndIpSockAddr(){
 
@@ -59,16 +59,30 @@ std::tuple<std::shared_ptr<unsigned char>, unsigned char *, std::shared_ptr<sock
 
     return std::make_tuple(buffer, bufferRaw, pSock, pSockRawIn, pSockRaw, pSockLen);
 
-};
+}
 
+void Services::UDPSocket::SetSocketBlocking(bool blocking){
+
+    //Get descriptor status flags
+    auto flags  =   fcntl(m_socket, F_GETFL);
+
+    //Clear blocking bit
+    flags       &=  ~O_NONBLOCK;
+
+    //Select if set the blocking bit or not
+    flags       |=  blocking ? 0 : O_NONBLOCK;
+
+    //Set the flag 
+    fcntl(m_socket, F_SETFL, flags); 
+
+}
 void Services::UDPSocket::StartSocket(){
 
     m_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     if (m_socket == -1) return;
 
     /* Non blocking socket */
-    auto flags  = fcntl(m_socket, F_GETFL);
-    fcntl(m_socket, F_SETFL, flags | O_NONBLOCK);
+    SetSocketBlocking(true);
 
 }
 
@@ -147,8 +161,6 @@ void Services::UDPSocket::RunService() {
             /* Check Info on the peer */
             auto datagram = datagram_tuple{nRawDataSize, pSock, buffer};
             datagramReceived.emit(datagram);
-            std::cout << "OKO About to crash.....\n";
-        
             
         } else {
             EmitError(*this, errorNumber);
@@ -162,7 +174,7 @@ void Services::UDPSocket::RunService() {
 
 long Services::UDPSocket::SendDatagram(const Services::UDPSocket::datagram_tuple &datagramTuple) {
 
-    auto& [ nRawDataSize, pSrcAddrIn , pBufferData] = datagramTuple;
+    auto& [nRawDataSize, pSrcAddrIn , pBufferData] = datagramTuple;
     auto pSrcAddr                                   = reinterpret_cast<sockaddr*>(pSrcAddrIn.get());
     auto pBufferRawData                             = pBufferData.get();
     long nBytesSentAccumulator                      = 0;
