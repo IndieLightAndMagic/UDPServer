@@ -82,7 +82,7 @@ void Services::UDPSocket::StartSocket(){
     if (m_socket == -1) return;
 
     /* Non blocking socket */
-    SetSocketBlocking(true);
+    SetSocketBlocking(false);
 
 }
 
@@ -155,6 +155,15 @@ void Services::UDPSocket::RunService() {
 
         std::call_once(flagread, [&](){
             std::cout << "Recvfrom result = " << nRawDataSize << std::endl;
+            if ( errorNumber == EAGAIN)
+            {
+                std::cout << "Yep, EAGAIN -- This seems to be a blocking socket." << std::endl;
+            }
+            else 
+            {
+                std::cout << "Nop, A bad ugly bug is going on -- . Emitting a sitting duck socket error." << std::endl;
+
+            }
         });
         if (nRawDataSize > 0) {
 
