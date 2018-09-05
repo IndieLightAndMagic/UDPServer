@@ -37,18 +37,21 @@ public:
 
             auto renderLine = ((index % 0x10 == 0x0f) || (index + 1 == nSize));
             if (renderLine){
-                auto width = 3 * (0x0f - index % 0x10) + 1;
-                std::cout << std::setw(width) << std::setfill(' ') << "[" ;
+                
+                auto widthbytedump  = 3 * (0x0f - index % 0x10) + 1;
+                auto width          = (0x0f - index % 0x10) + 1;
+                
+                std::cout << std::setw(widthbytedump) << std::setfill(' ') << "[" ;
                 auto lineidx = index - (index % 0x10);
                 for (;lineidx < index + 1; ++lineidx) {
 
-                    if ( pBufferData[lineidx] != '\n' && pBufferData[lineidx] != '\t')
+                    if (pBufferData[lineidx] != '\n' && pBufferData[lineidx] != '\t')
                         std::cout << pBufferData[lineidx];
                     else
                         std::cout << " ";
 
                 }
-                std::cout << "]" << std::endl;
+                std::cout << std::setw(width) << std::setfill(' ') <<"]" << std::endl;
 
             }
 

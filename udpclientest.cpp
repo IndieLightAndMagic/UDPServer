@@ -19,15 +19,18 @@ void die(const char *s)
 int main(int argc, char ** argv)
 {
     Services::UDPSocket x;
+    x.SetSocketBlocking(true);
     char buf[BUFLEN];
     
-    auto messageSP  = std::shared_ptr<char>(
-        new char[BUFLEN],
-        [](char* ptr){
-            delete []ptr;
-        });
-    auto message    = messageSP.get();
-    std::memset(message, 0, BUFLEN);
+    auto messageSP  = std::shared_ptr<unsigned char>(
+            new unsigned char[BUFLEN],
+            [](unsigned char* ptr){
+                delete []ptr;
+                std::cout << "message buffer out!!!!\n";
+            }
+    );
+    auto messageRaw = reinterpret_cast<char*>(messageSP.get());
+    std::memset(messageRaw, 0, BUFLEN);
 
     if (argc < 3) {
         std::cout << "Usage: idpclientest[ip] [port]\n\n";
@@ -36,32 +39,34 @@ int main(int argc, char ** argv)
         std::cout << "\tExample : udpclient test 192.168.0.15 8888\n";
         return 0;
     }
+
+
     while(1)
     {
-        std::memset(message, 0, BUFLEN);
-        printf("Enter message : ");
-        
-        std::fgets(message, BUFLEN, stdin);
+        std::memset(messageRaw, 0, BUFLEN);
+        printf("Enter messageRaw : ");
+
+        std::fgets(messageRaw, BUFLEN, stdin);
         Services::UDPSocket::datagram_tuple dataTuple;
-        //send the message
+
+        //send the messageRaw
         {
-            auto datagramTuple = Services::UDPSocket::CreateDatagram(std::string{argv[1]}, std::string{argv[2]}, reinterpret_cast<unsigned char*>(message), std::strlen(message));
+            auto datagramTuple = Services::UDPSocket::CreateDatagram(std::string{argv[1]}, std::string{argv[2]}, reinterpret_cast<unsigned char*>(messageRaw), std::strlen(messageRaw));
             x.SendDatagram(datagramTuple);
         }
-        return 0;
+
         //receive a reply and print it
         //clear the buffer by filling null, it might have previously received data
         std::memset(buf, 0, BUFLEN);
 
         //try to receive some data, this is a blocking call
-        while(0) {
-            auto[bValid, errorCondition, datagramTuple] = x.RecvDatagram();
-            if (bValid){
-                auto [nData, pSockAddrIn, pData] = datagramTuple;
-                std::cout << pData.get() << "\n";
-            }
+        auto[bValid, errorCondition, datagramTuple] = x.RecvDatagram();
+        if (bValid){
+            auto [nData, pSockAddrIn, pData] = datagramTuple;
+            std::cout << pData.get() << "\n";
+        } else {
+            break;
         }
-
         //std::puts(reinterpret_cast<const char*>(incomingMessage.data()));
     }
 

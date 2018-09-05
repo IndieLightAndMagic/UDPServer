@@ -238,7 +238,7 @@ std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> Inva
 
     bool valid = false;
     auto errorcondition = std::error_condition{};
-    auto datagram   = std::make_tuple(0, nullptr, nullptr);
+    auto datagram       = std::make_tuple(0, nullptr, nullptr);
 
     return std::make_tuple(valid, errorcondition, datagram);
 
