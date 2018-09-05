@@ -89,6 +89,7 @@ namespace Services {
         /*!
          * @brief Send a datagram tuple.
          * @param datagramTuple is the tuple containing a long type byte size of the datagram, a pointer to sockaddr_in structure which contains info regarding the dest address port and a pointer to the byte vector itself with the data to be transmitted.
+         * @return     The number of bytes sent.
          */
         long SendDatagram(const datagram_tuple& datagramTuple);
 
@@ -110,7 +111,7 @@ namespace Services {
         static datagram_tuple CreateDatagram(std::string ip, std::string port, unsigned char* pDataBuffer, long sz);
 
         /**
-         * @brief      Sets the socket blocking.
+         * @brief      Sets the socket blocking. Non service should be running on this socket when setting the blockin / non - blocking condition.
          *
          * @param[in]  blocking  The blocking
          */

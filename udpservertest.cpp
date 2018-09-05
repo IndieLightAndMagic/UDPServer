@@ -3,6 +3,7 @@
 #include "udpserver.h"
 
 #include <thread>
+#include <iomanip>
 #include <iostream>
 
 class MyUDPServer : public Services::UDPSocket {
@@ -10,12 +11,51 @@ class MyUDPServer : public Services::UDPSocket {
 public:
     GTech::Signal<> errorHappened;
     MyUDPServer(const char* port, Services::NetworkInterface* pNetworkInterface):UDPSocket(port, pNetworkInterface){
-        errorHappened.connect_member(this, &MyUDPServer::onErrorHappening);
+        
     }
-    void onErrorHappening()
-    {
-        std::cout << "Error is happenning!!!!!!\n";
+    
+    void onDatagramSent(long chunkOffset, long chunkSize, const datagram_tuple& datagramTuple){
+
+        const char hexdigits[] = {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
+
+        std::cout << "0x" << std::hex << chunkOffset << std::dec << " [ " << chunkSize << " ] \n";
+        auto [nSize, pSocl, pBuffer] = datagramTuple;
+        auto pBufferData = pBuffer.get();
+
+        for ( int index = 0; index < nSize; ++index ){
+
+            auto value = pBufferData[index];
+
+            auto renderAddress = (index % 16 == 0) ? true : false;
+
+            if (renderAddress) std::cout << "\n\t0x" << std::setw(4) << std::setfill('0') << std::hex << index << std::dec << " ";
+
+            decltype(value) lowIndx = value & 0x0f;
+            decltype(value) highIdx = (value >> 4) & 0x0f;
+            std::string accumulator = std::string{hexdigits[highIdx]} + std::string{hexdigits[lowIndx]};
+            std::cout << accumulator << " ";
+
+            auto renderLine = ((index % 0x10 == 0x0f) || (index + 1 == nSize));
+            if (renderLine){
+                auto width = 3 * (0x0f - index % 0x10) + 1;
+                std::cout << std::setw(width) << std::setfill(' ') << "[" ;
+                auto lineidx = index - (index % 0x10);
+                for (;lineidx < index + 1; ++lineidx) {
+
+                    if ( pBufferData[lineidx] != '\n' && pBufferData[lineidx] != '\t')
+                        std::cout << pBufferData[lineidx];
+                    else
+                        std::cout << " ";
+
+                }
+                std::cout << "]" << std::endl;
+
+            }
+
+        }
+
     }
+
     void onDataIsReady(Services::UDPSocket::datagram_tuple datagramTuple)
     {
         std::cout << "Data Arrived!!!!!\n";
@@ -25,7 +65,7 @@ public:
             errorHappened.emit();
             return;
         }
-        auto [ nData, pSrcAddrIn , pBufferData] = datagramTuple;
+        auto [nData, pSrcAddrIn , pBufferData]  = datagramTuple;
         auto pBufferRawData                     = pBufferData.get();
         auto pRawSrcAddrIn                      = pSrcAddrIn.get();
 
@@ -44,10 +84,9 @@ public:
         std::cout << "\n";
 
     }
-    void onDataIsReadyPing(Services::UDPSocket::datagram_tuple){
+    void onDataIsReadyPing(Services::UDPSocket::datagram_tuple datagramTuple){
         std::cout << "Sending: \n";
-        //std::cout << std::get<2>(datagramTuple).get() << "\n";
-        //SendDatagram(datagramTuple);
+        SendDatagram(datagramTuple);
     }
 
 };
@@ -79,8 +118,10 @@ int main(int argc, char ** argv) {
     }
 
     MyUDPServer u(argv[3], &interfaceMap[argv[2]]);
-    u.datagramReceived.connect_member(&u, &MyUDPServer::onDataIsReady);
-    u.datagramReceived.connect_member(&u, &MyUDPServer::onDataIsReadyPing);
+    u.datagramReceived.connect_member(  &u, &MyUDPServer::onDataIsReady);
+    u.datagramReceived.connect_member(  &u, &MyUDPServer::onDataIsReadyPing);
+    u.datagramSent.connect_member(      &u, &MyUDPServer::onDatagramSent);
+
     std::thread t_service{[&](){
 
         u.RunService();

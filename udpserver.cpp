@@ -76,6 +76,16 @@ void Services::UDPSocket::SetSocketBlocking(bool blocking){
     fcntl(m_socket, F_SETFL, flags); 
 
 }
+
+bool Services::UDPSocket::IsSocketBlocking(){
+
+    //Flags.
+    auto flags  =   fcntl(m_socket, F_GETFL);
+    auto isNonBlocking = flags & O_NONBLOCK ? true : false;
+    return !isNonBlocking;
+
+}
+
 void Services::UDPSocket::StartSocket(){
 
     m_socket = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -123,6 +133,10 @@ Services::UDPSocket::UDPSocket(const char *portString, const NetworkInterface *p
         return;
 
     }
+    else {
+
+        std::cout << "This socket is faulty..... check...\n";
+    }
 
     close(m_socket);
 
@@ -137,8 +151,11 @@ void Services::UDPSocket::StopService() {
 void Services::UDPSocket::RunService() {
 
     m_valid = true;
-    std::once_flag flag, flagread;
+    auto isABlockingSocket      = IsSocketBlocking();
+    auto isNOTABlockingSocket   = !isABlockingSocket;
 
+
+    std::once_flag flag, flagread;
     while(m_valid)
     {
         std::call_once(flag, [&](){
@@ -152,17 +169,18 @@ void Services::UDPSocket::RunService() {
         /* receive in an unblocking fashion. */
         auto nRawDataSize   = recvfrom(m_socket, bufferRaw, maxBufferSize, 0, reinterpret_cast<sockaddr*>(pSock.get()), reinterpret_cast<socklen_t *>(&pSrcAddrLen));
         auto errorNumber    = errno;
+        
+        auto errorOcurred   = (nRawDataSize < 1) && (EWOULDBLOCK == errorNumber && isABlockingSocket); 
 
         std::call_once(flagread, [&](){
             std::cout << "Recvfrom result = " << nRawDataSize << std::endl;
-            if ( errorNumber == EAGAIN)
+            if ( !errorOcurred )
             {
-                std::cout << "Yep, EAGAIN -- This seems to be a blocking socket." << std::endl;
+                std::cout << "Yep, EAGAIN -- This seems to be a non blocking socket." << std::endl;
             }
             else 
             {
                 std::cout << "Nop, A bad ugly bug is going on -- . Emitting a sitting duck socket error." << std::endl;
-
             }
         });
         if (nRawDataSize > 0) {
@@ -171,8 +189,13 @@ void Services::UDPSocket::RunService() {
             auto datagram = datagram_tuple{nRawDataSize, pSock, buffer};
             datagramReceived.emit(datagram);
             
-        } else {
+        } else if (errorOcurred) {
+
             EmitError(*this, errorNumber);
+
+        } else {
+
+            /* We should emit the non blocking socket, didn't received data.  */
         }
 
     }
