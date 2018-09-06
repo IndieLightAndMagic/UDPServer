@@ -61,12 +61,12 @@ namespace Services {
         UDPSocket(const char *port, const NetworkInterface *pNetworkInterface);
 
         /**
-         * @brief      Runs UDP Server. This function blocks until StopService is Called. 
+         * @brief      Runs UDP Server. This function blocks until StopService is Called.
          */
         void RunService();
 
         /**
-         * @brief      Stops the UDPService. This is called from a different thread than the one running UDPServer::StartService. 
+         * @brief      Stops the UDPService. This is called from a different thread than the one running UDPServer::StartService.
          */
         void StopService();
 
@@ -80,7 +80,7 @@ namespace Services {
          */
         GTech::Signal<long , long, const datagram_tuple&> datagramSent;
 
-        
+
         static void EmitError(const UDPSocket& u, int errorNumber);
         GTech::Signal<std::error_condition, std::string>    datagramError;
         GTech::Signal<std::string>                          datagramUnknownError;
@@ -94,14 +94,51 @@ namespace Services {
         long SendDatagram(const datagram_tuple& datagramTuple);
 
         /**
-         * @brief      Recieve a Datagram. This function doesn't block. 
+         * @brief      Recieve a Datagram. This function doesn't block.
          *
-         * @return     A tuple with 3 fields: a bool to check if a datagram was received (true) or not(false). An error_condition which should be ignored if message is valid. A datagram with the received datagram if message is valid. 
+         * @return     A tuple with 3 fields: a bool to check if a datagram was received (true) or not(false). An error_condition which should be ignored if message is valid. A datagram with the received datagram if message is valid.
          */
         std::tuple<bool, std::error_condition, datagram_tuple> RecvDatagram();
 
+
         /**
-         * @brief      Create a Datagram with message and destination ip:port address. 
+         * @brief Receive a Datagram. This function should block.
+         * @param func  A func to call with the received datagram if a valid datagram is received.
+         * @return true if a valid datagram was received.
+         */
+        bool RecvDatagramAndCallFunction(void(*func)(datagram_tuple)){
+
+            auto resultTuple    = RecvDatagram();
+            auto validDatagram  = std::get<0>(resultTuple);
+
+            if (validDatagram){
+                func(std::get<2>(resultTuple));
+            }
+            return validDatagram;
+
+        }
+
+        /**
+         *
+         * @tparam T A class Type.
+         * @param pInst An pointer of instance T.
+         * @param func A public method of class T, which will be called with parameter of datagram_tuple type.
+         * @return true if a valid datagram was received, otherwise false is returned.
+         * 
+         */
+        template <typename T>
+        bool RecvDatagramAndCallMethod(T* pInst, void (T::*func)(datagram_tuple)){
+
+            auto resultTuple    = RecvDatagram();
+            auto validaDatagram = std::get<0>(resultTuple);
+            if (validaDatagram){
+                pInst->func(std::get<2>(resultTuple));
+            }
+            return validaDatagram;
+
+        }
+        /**
+         * @brief      Create a Datagram with message and destination ip:port address.
          *
          * @param[in]  ip    { parameter_description }
          * @param[in]  port  The port
@@ -123,7 +160,7 @@ namespace Services {
          * @return     True if socket blocking, False otherwise.
          */
         bool IsSocketBlocking();
-        
+
         ~UDPSocket();
     };
 }
