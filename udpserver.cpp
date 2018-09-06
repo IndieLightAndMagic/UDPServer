@@ -164,15 +164,12 @@ void Services::UDPSocket::RunService() {
         static unsigned long const maxBufferSize    = 1 << 13;
 
 
-        auto [buffer, bufferRaw, pSock, pSockRawIn, pSockRaw, pSrcAddrLen] = CreateBufferAndIpSockAddr();
-
-        /* receive in an unblocking fashion. */
-        auto nRawDataSize   = recvfrom(m_socket, bufferRaw, maxBufferSize, 0, reinterpret_cast<sockaddr*>(pSock.get()), reinterpret_cast<socklen_t *>(&pSrcAddrLen));
-        auto errorNumber    = errno;
-        
-        auto errorOcurred   = (nRawDataSize < 1) && (EWOULDBLOCK == errorNumber && isABlockingSocket); 
+        auto [datagramIsOk, errorCondition, datagram] = Services::UDPSocket::RecvDatagram();
+        auto errorOcurred   = !datagramIsOk;
+        auto nRawDataSize = std::get<0>(datagram);
 
         std::call_once(flagread, [&](){
+
             std::cout << "Recvfrom result = " << nRawDataSize << std::endl;
             if ( !errorOcurred )
             {
@@ -183,20 +180,7 @@ void Services::UDPSocket::RunService() {
                 std::cout << "Nop, A bad ugly bug is going on -- . Emitting a sitting duck socket error." << std::endl;
             }
         });
-        if (nRawDataSize > 0) {
 
-            /* Check Info on the peer */
-            auto datagram = datagram_tuple{nRawDataSize, pSock, buffer};
-            datagramReceived.emit(datagram);
-            
-        } else if (errorOcurred) {
-
-            EmitError(*this, errorNumber);
-
-        } else {
-
-            /* We should emit the non blocking socket, didn't received data.  */
-        }
 
     }
 
@@ -247,24 +231,41 @@ std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> Inva
 std::tuple<bool, std::error_condition, Services::UDPSocket::datagram_tuple> Services::UDPSocket::RecvDatagram() {
 
 
+
     if (m_valid == false) return InvalidDatagram();
 
     auto    [pSock, pSockRawIn, pSockRaw, pSockLen] = CreateIpSockAddr();
     auto    [buffer, bufferRaw] = CreateBuffer(maxBufferSize);
     
     //Read
-    auto nBytes = recvfrom(m_socket, buffer.get(), maxBufferSize, 0, pSockRaw, reinterpret_cast<socklen_t *>(&pSockLen));
-    
+    auto isABlockingSocket  = IsSocketBlocking();
+    auto nRawDataSize       = recvfrom(m_socket, buffer.get(), maxBufferSize, 0, pSockRaw, reinterpret_cast<socklen_t *>(&pSockLen));
+    auto errorNumber        = errno;
+    auto errorOcurred       = (nRawDataSize < 1) && (EWOULDBLOCK == errorNumber && isABlockingSocket);
+
     //Error
-    if ( nBytes == -1 ) return InvalidDatagram();
+    if ( nRawDataSize == -1 ) return InvalidDatagram();
     
     //No Error but nothing returned.
     auto valid = true;
-    if ( nBytes == 0){
+    if (nRawDataSize > 0) {
+
+        /* Check Info on the peer */
+        auto datagram = datagram_tuple{nRawDataSize, pSock, buffer};
+        datagramReceived.emit(datagram);
+        return std::make_tuple(true, std::error_condition{}, datagram);
+
+    } else if (errorOcurred) {
+
+        EmitError(*this, errorNumber);
+        return InvalidDatagram();
+
+    } else {
+
+        /* We should emit the non blocking socket, didn't received data.*/
         return std::make_tuple(true, std::error_condition{}, std::make_tuple(0, nullptr, nullptr));
-    } 
-    return std::make_tuple(true, std::error_condition{}, std::make_tuple(nBytes, pSock, buffer));
-    
+    }
+
 }
 
 Services::UDPSocket::datagram_tuple Services::UDPSocket::CreateDatagram(std::string ipString, std::string portString , unsigned char* pDataBuffer, long sz){
